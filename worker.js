@@ -66,6 +66,12 @@ export default {
       }
       const reference = "WALKER-" + crypto.randomUUID().replaceAll("-", "").toUpperCase();
       const callbackUrl = env.SITE_URL.replace(/\/$/, "") + "/?payment=return";
+      try {
+        await env.DB.prepare("INSERT INTO orders (reference, customer_name, email, occasion, musical_style, story, amount, currency, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))")
+          .bind(reference, customer, email, occasion, style, story, PRICE_KOBO, CURRENCY).run();
+      } catch {
+        return response({ error: "We could not save your order securely. No checkout was opened." }, 500);
+      }
       const init = await paystackRequest("/transaction/initialize", env.PAYSTACK_SECRET_KEY, {
         email,
         amount: PRICE_KOBO,
@@ -81,13 +87,8 @@ export default {
         }
       });
       if (!init.ok || !init.data.data?.authorization_url) {
+        await env.DB.prepare("UPDATE orders SET status='cancelled' WHERE reference=? AND status='pending'").bind(reference).run();
         return response({ error: "Paystack could not start checkout. Please try again later." }, 502);
-      }
-      try {
-        await env.DB.prepare("INSERT INTO orders (reference, customer_name, email, occasion, musical_style, story, amount, currency, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))")
-          .bind(reference, customer, email, occasion, style, story, PRICE_KOBO, CURRENCY).run();
-      } catch {
-        return response({ error: "We could not save your order securely. No checkout was opened." }, 500);
       }
       return response({ ok: true, reference, checkoutUrl: init.data.data.authorization_url });
     }
@@ -96,13 +97,17 @@ export default {
       if (!env.DB || !env.PAYSTACK_SECRET_KEY) return response({ error: "Payment verification is not configured." }, 503);
       const reference = clean(url.searchParams.get("reference"), 100);
       if (!reference) return response({ error: "Missing payment reference." }, 400);
+      const existing = await env.DB.prepare("SELECT reference, status, email FROM orders WHERE reference=?").bind(reference).first();
+      if (!existing) return response({ error: "We could not match this payment reference to an order." }, 404);
+      if (existing.status === "paid" || existing.status === "in_progress" || existing.status === "delivered") {
+        return response({ ok: true, reference, status: existing.status });
+      }
       const verified = await paystackRequest("/transaction/verify/" + encodeURIComponent(reference), env.PAYSTACK_SECRET_KEY);
-      if (!verified.ok || verified.data.data?.status !== "success" || verified.data.data?.currency !== CURRENCY || verified.data.data?.amount !== PRICE_KOBO) {
+      if (!verified.ok || verified.data.data?.status !== "success" || verified.data.data?.currency !== CURRENCY || verified.data.data?.amount !== PRICE_KOBO || verified.data.data?.customer?.email?.toLowerCase() !== existing.email) {
         return response({ ok: false, status: "pending", message: "Payment is not confirmed yet. Please do not pay again until you check your receipt." }, 202);
       }
       await env.DB.prepare("UPDATE orders SET status='paid', paid_at=datetime('now') WHERE reference=? AND status='pending'").bind(reference).run();
       const order = await env.DB.prepare("SELECT reference, status FROM orders WHERE reference=?").bind(reference).first();
-      if (!order) return response({ error: "We could not match this payment to an order." }, 404);
       return response({ ok: true, reference, status: order.status });
     }
 
