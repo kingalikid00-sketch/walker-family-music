@@ -5,4 +5,4 @@ compatibility_date = "2026-11-10"
 [[d1_databases]]
 binding = "DB"
 database_name = "walker-family-orders"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "78b4fc62-6f76-426f-84c1-3b08245aa030"
