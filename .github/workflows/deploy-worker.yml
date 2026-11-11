@@ -17,12 +17,12 @@ jobs:
       - name: Create or update database tables
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN_2 }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 execute walker-family-orders --remote --file=./schema.sql
       - name: Deploy order API
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN_2 }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
